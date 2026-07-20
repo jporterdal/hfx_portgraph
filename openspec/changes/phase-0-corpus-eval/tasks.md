@@ -1,17 +1,19 @@
 ## 1. Repo layout and ignore rules
 
-- [ ] 1.1 Create `corpus/raw/`, `corpus/README.md` placeholder, and `evals/` directories
-- [ ] 1.2 Add `corpus/raw/*.pdf` to `.gitignore` (keep `corpus/manifest.yaml` and READMEs trackable)
-- [ ] 1.3 Add a minimal Python project stub if needed for the download script (`pyproject.toml` or `requirements.txt` with `httpx`/`beautifulsoup4` as chosen)
+- [x] 1.1 Create `corpus/raw/`, `corpus/README.md` placeholder, and `evals/` directories
+- [x] 1.2 Add `corpus/raw/*.pdf` to `.gitignore` (keep `corpus/manifest.yaml` and READMEs trackable)
+- [x] 1.3 Add a minimal Python project stub if needed for the download script (`pyproject.toml` or `requirements.txt` with `httpx`/`beautifulsoup4` as chosen)
 
 ## 2. Corpus acquisition
 
-- [ ] 2.1 Inventory the live reports page and list available years/types/languages in notes (paste into `corpus/README.md`)
-- [ ] 2.2 Implement `scripts/fetch_corpus.py` (or equivalent) to download PDFs into `corpus/raw/` using the `{year}_{report_type}_{lang}.pdf` naming convention
-- [ ] 2.3 Run acquisition for annual + consolidated financials across available years; fall back to documented manual download for any brittle links
+- [x] 2.1 Inventory the live reports page and list available years/types/languages in notes (paste into `corpus/README.md`)
+- [ ] 2.2 Add a curated URL catalog for v1 annual/financials targets and implement `scripts/fetch_corpus.py` to save into `corpus/raw/` with `{year}_{report_type}_{lang}.pdf` naming: try live PDF URL, then Wayback rewrite; do not require live HTML scraping
+- [ ] 2.3 Run acquisition for annual + consolidated financials across catalog years; leave gaps for manual browser download when live and Wayback both fail (acceptable in CF-blocked agent/CI environments)
 - [ ] 2.4 Write `corpus/manifest.yaml` with `id`, `year`, `report_type`, `language`, `source_url`, `filename`, `status` for every present (and known-missing) entry
 - [ ] 2.5 Optionally record checksums (`sha256`) in the manifest for each `status: present` file
-- [ ] 2.6 Finish `corpus/README.md` with rebuild steps (script usage + manual fallback)
+- [ ] 2.6 Finish `corpus/README.md` with three-tier rebuild steps: curated catalog / script (live→Wayback), then manual browser drop + manifest refresh
+
+
 
 ## 3. Golden eval set
 
@@ -22,6 +24,8 @@
 - [ ] 3.5 Expand to 20–40 total items; ensure ≥80% have controlled tags
 - [ ] 3.6 Add ≥1 `table_heavy` and ≥1 `year_collision` hard case; add `bilingual` item or document bilingual gap in `evals/README.md`
 - [ ] 3.7 Cross-check `expected_evidence` report/filename hints against `corpus/manifest.yaml` ids/filenames
+
+
 
 ## 4. Validation and Phase 0 exit
 

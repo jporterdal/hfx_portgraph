@@ -22,6 +22,8 @@ Constraints from the architecture plan:
 - Automated answer scoring / LLM-as-judge
 - Full bilingual parallel corpora if French editions are sparse (document gaps instead)
 - Polished report UX or product packaging
+- Cloudflare bypass stacks (Playwright clearance flows, FlareSolverr, TLS impersonation, residential proxies) for Phase 0
+- Live HTML scraping of the reports page as the acquisition source of truth
 
 ## Decisions
 
@@ -35,10 +37,10 @@ Constraints from the architecture plan:
 - **Why:** Predictable joins from eval items → files without opaque UUIDs.
 - **Alternatives:** Keep publisher filenames only (fragile); content-hash names (opaque for learning).
 
-### 3. Acquisition: scripted download with manual fallback
-- **Choice:** Small Python script (or documented curl steps) that fetches linked PDFs from the reports page into `corpus/raw/` and upserts manifest entries. Manual download is acceptable if scraping is brittle.
-- **Why:** Site structure may change; Phase 0 success is inventory completeness, not scraper elegance.
-- **Alternatives:** Fully manual download only (slower, error-prone); headless browser scrape (heavy for this phase).
+### 3. Acquisition: curated URLs → live PDF attempt → Wayback → manual browser
+- **Choice:** Three-tier acquisition. (1) Maintain a curated URL catalog of known annual/financials PDF URLs (from Wayback inventory / browser confirmation). (2) `scripts/fetch_corpus.py` tries each live `porthalifax.ca` PDF URL, then a Wayback rewrite if live fails (e.g. Cloudflare 403). (3) Document manual browser download into `corpus/raw/` with the stable filename convention; re-run manifest/checksum steps. Do **not** scrape the live reports HTML as the primary mechanism.
+- **Why:** Live site and direct PDF URLs often return Cloudflare challenges to automated clients; Wayback already provided a usable inventory snapshot; Phase 0 success is a complete local corpus + manifest, not scraper resilience.
+- **Alternatives considered:** Live HTML scrape with BeautifulSoup (blocked by CF); Playwright/FlareSolverr bypass (fragile, ToS-grey, overkill); fully manual-only (slower but acceptable as the final tier).
 
 ### 4. Golden set format: JSONL
 - **Choice:** `evals/golden.jsonl` — one JSON object per line.
@@ -72,11 +74,12 @@ Each item MUST include:
 
 ## Risks / Trade-offs
 
-- **[Risk] Reports page HTML/PDF URLs change** → Mitigation: manifest stores source URL + optional checksum; script failures fall back to manual download instructions in `corpus/README.md`.
+- **[Risk] Cloudflare blocks automated clients on live HTML and PDF URLs** → Mitigation: curated catalog + Wayback fetch; manual browser drop is a first-class success path; never block Phase 0 on CF bypass.
+- **[Risk] Reports page HTML/PDF URLs change or newest years missing from Wayback** → Mitigation: manifest stores `source_url` + optional checksum; README documents browser download for post-snapshot years (e.g. 2024–2025).
 - **[Risk] Incomplete year coverage or missing French editions** → Mitigation: manifest records gaps explicitly (`status: missing`); golden set tags `bilingual` only when both languages exist.
 - **[Risk] Golden questions without page hints become unusable after bad parsing** → Mitigation: require `expected_evidence.years` always; prefer `page_hint` or section title when known from skimming PDFs.
 - **[Risk] Writing gold answers that later LLMs copy-match wrongly grades style** → Mitigation: emphasize evidence fields over polished answer prose in Phase 0.
-- **[Trade-off] Skipping automated download polish** → Faster start; may revisit scraper in a later chore change.
+- **[Trade-off] Curated catalog over live scrape** → Catalog can drift; cheaper than maintaining a CF-resistant scraper for dozens of public PDFs.
 
 ## Migration Plan
 
@@ -91,6 +94,6 @@ Rollback: delete `corpus/raw/` locally; revert committed manifest/evals if neede
 
 ## Open Questions
 
-- Exact set of `report_type` values beyond `annual` / `financials` / `other` once the live page is inventoried
-- Whether any PDFs are behind non-direct links requiring manual save
-- Minimum year range for v1 (e.g. 2019–2024 vs all available)
+- Whether 2024–2025 annual/financials (post-dating the Dec 2024 Wayback snapshot) are required for Phase 0 v1 or deferred until browser confirmation
+- Exact handling of the 2020 annual report if it is HTML flipbook-only rather than a direct PDF
+- Minimum year range for v1 beyond the documented 2020–2023 core targets (e.g. include 2019 and earlier historical financials?)

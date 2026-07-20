@@ -1,0 +1,23 @@
+# Git ignore
+
+# Port of Halifax PDF binaries (rebuild via corpus/README.md / scripts/fetch_corpus.py)
+corpus/raw/*.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+canvases/
