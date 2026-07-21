@@ -23,7 +23,7 @@ Local inventory of public Port Authority reports used by `hfx_portgraph`.
 - `report_type`: `annual` | `financials` | `other`
 - `lang`: `en` | `fr` | `unknown`
 
-## Rebuild (three-tier)
+## Rebuild — Phase 0 corpus PDFs
 
 ### 1. Curated catalog + script (live → Wayback)
 
@@ -65,6 +65,12 @@ python scripts/fetch_corpus.py --manifest-only
 ```bash
 python scripts/validate_phase0.py
 ```
+
+## Rebuild — Phase 1 parse / RAG
+
+After PDFs validate, see **[docs/phase-1.md](../docs/phase-1.md)** for Ollama setup and:
+
+`parse → chunk → index → ask`
 
 ## Inventory notes (Phase 0 / task 2.1)
 

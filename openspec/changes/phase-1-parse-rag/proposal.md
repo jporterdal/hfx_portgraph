@@ -31,3 +31,4 @@ Phase 0 delivered a local Port of Halifax PDF corpus and a golden eval set, but 
 - Scripts/CLI for parse → chunk → index → ask
 - Uses Phase 0 `corpus/manifest.yaml` `present` PDFs and `evals/golden.jsonl` for baseline smoke
 - Unblocks Phase 2 LangGraph loops over the same retrieval substrate
+- **Known gap (documented in design):** annual-report infographic KPIs may be missing from Docling Markdown; follow-on path is design-heavy detection → local Ollama VLM on figure crops (Marker useful as crop source), not Marker-as-primary parser

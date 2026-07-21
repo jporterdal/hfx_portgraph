@@ -3,6 +3,14 @@
 # Port of Halifax PDF binaries (rebuild via corpus/README.md / scripts/fetch_corpus.py)
 corpus/raw/*.pdf
 
+# Phase 1 parse / chunk / vector artifacts
+corpus/parsed/**
+!corpus/parsed/.gitkeep
+corpus/chunks/**
+!corpus/chunks/.gitkeep
+data/chroma/
+.chroma/
+
 # Python
 __pycache__/
 *.py[cod]

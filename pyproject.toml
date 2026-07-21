@@ -7,6 +7,9 @@ requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",
     "pyyaml>=6.0",
+    "docling>=2.15",
+    "chromadb>=0.5",
+    "ollama>=0.4",
 ]
 
 [project.optional-dependencies]
@@ -14,12 +17,18 @@ dev = [
     "ruff>=0.6",
 ]
 
+[project.scripts]
+hfx-parse = "hfx_portgraph.cli:parse_main"
+hfx-chunk = "hfx_portgraph.cli:chunk_main"
+hfx-index = "hfx_portgraph.cli:index_main"
+hfx-ask = "hfx_portgraph.cli:ask_main"
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = []
+[tool.setuptools.packages.find]
+include = ["hfx_portgraph*"]
 
 [tool.ruff]
 line-length = 100
