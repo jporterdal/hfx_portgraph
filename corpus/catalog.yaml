@@ -1,0 +1,56 @@
+# Curated v1 corpus targets (annual + consolidated financials).
+# Acquisition: scripts/fetch_corpus.py tries source_url, then wayback_url / Wayback rewrite.
+# Do not scrape the live reports HTML page.
+
+wayback_timestamp: "20241214192351"
+
+reports:
+  - id: 2023_annual_en
+    year: 2023
+    report_type: annual
+    language: en
+    source_url: https://www.porthalifax.ca/wp-content/uploads/2024/05/WEB-medium-res-Port-ENGLISH-2023-AnnualReport-May29-2024.pdf
+
+  - id: 2023_financials_en
+    year: 2023
+    report_type: financials
+    language: en
+    source_url: https://www.porthalifax.ca/wp-content/uploads/2024/04/HPAFinancialStatements2023-FINAL-ENG.pdf
+
+  - id: 2022_annual_en
+    year: 2022
+    report_type: annual
+    language: en
+    source_url: https://www.porthalifax.ca/wp-content/uploads/2024/03/HPA-Annual-Report-2022-ENG.pdf
+
+  - id: 2022_financials_en
+    year: 2022
+    report_type: financials
+    language: en
+    source_url: https://www.porthalifax.ca/wp-content/uploads/2024/05/HPA-Financials-December-31-2022.pdf
+
+  - id: 2021_annual_en
+    year: 2021
+    report_type: annual
+    language: en
+    source_url: https://www.porthalifax.ca/wp-content/uploads/2022/05/HPA_Annual_Report_2021.pdf
+
+  - id: 2021_financials_en
+    year: 2021
+    report_type: financials
+    language: en
+    source_url: https://www.porthalifax.ca/wp-content/uploads/2022/04/FINAL-HPA-2021-FS.pdf
+
+  - id: 2020_annual_en
+    year: 2020
+    report_type: annual
+    language: en
+    # Linked as HTML flipbook on the reports page; no direct PDF in Dec 2024 Wayback inventory.
+    source_url: null
+    notes: "May be HTML flipbook only (/HPA-2020-Annual-Report/). Manual browser save if a PDF exists."
+
+  - id: 2020_financials_en
+    year: 2020
+    report_type: financials
+    language: en
+    source_url: https://www.porthalifax.ca/wp-content/uploads/2021/05/2020-Signed-FINAL-FS-HPA-2020.pdf

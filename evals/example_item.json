@@ -1,0 +1,13 @@
+{
+  "id": "ex-001",
+  "question": "What container throughput did the port report for 2022?",
+  "tags": ["single_doc", "table_heavy"],
+  "expected_evidence": {
+    "years": [2022],
+    "metrics": ["container_throughput"],
+    "report_ids": ["2022_annual_en"],
+    "filenames": ["2022_annual_en.pdf"],
+    "page_hint": "cargo / performance statistics section"
+  },
+  "notes": "Answer must cite a numeric throughput figure grounded in the 2022 annual report (table or labeled KPI), not a paraphrase without a number."
+}
