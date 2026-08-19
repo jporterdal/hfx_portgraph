@@ -54,6 +54,29 @@ python scripts/ask.py "What was operating income for 2023?"
 python scripts/ask.py --golden gq-003
 ```
 
+### What each step does
+
+1. **Parse** — `parse.py` runs Docling's `DocumentConverter` over the raw PDF, exports the
+   document to Markdown, and walks Docling's item iterator to capture best-effort page-number
+   provenance per text item. Markdown tables are regex-extracted into a `tables.md` sidecar for
+   manual QA. Idempotent by default (skips if `document.md` + `meta.json` already exist); pass
+   `--force` to redo.
+
+2. **Chunk** — `chunk.py` splits each report's Markdown on H2/H3 headings to build **parent**
+   chunks (full section text) and packs each section's paragraphs into **child** chunks (~500
+   tokens, 300–800 range, using a ~4-chars/token heuristic since no real tokenizer is wired up).
+   Parent and child records are interleaved in one JSONL per report, linked by `parent_id`.
+
+3. **Embed / index** — `rag.py` embeds only the child chunks via Ollama (`nomic-embed-text` by
+   default) and upserts them into a local Chroma `PersistentClient` under `data/chroma/`, all in
+   one collection (`hfx_child_chunks`) with metadata (`report_id`, `section`, `heading`, page
+   fields).
+
+4. **Ask** — embeds the question, retrieves the top-k child chunks from Chroma, then widens each
+   hit back to its parent section text by re-reading the chunk JSONL — narrow retrieval, full-
+   context answer. The chat prompt requires citations in `[chunk_id=...; page_start=...]` form; a
+   lightweight check downgrades the result to `answer_uncited` if the model doesn't comply.
+
 ## Parse quality gate
 
 Before bulk indexing, confirm ≥3 golden items tagged `table_heavy` are answerable from spike parse Markdown/tables alone (no RAG). Record the outcome under `evals/phase1_parse_gate.md`.
