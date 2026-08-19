@@ -22,17 +22,21 @@
 - [x] 4.1 Implement embed/index script: Ollama embeddings over child chunks into local Chroma (or chosen store); gitignore the index
 - [x] 4.2 Implement ask CLI: retrieve children → expand parents → generate answer with chunk/page (or section) citations
 - [x] 4.3 Implement insufficient-evidence path (empty retrieval / ungroundable → explicit “I don’t know”)
-- [ ] 4.4 Smoke-ask one `single_doc` golden item and confirm citations appear
+- [x] 4.4 Smoke-ask one `single_doc` golden item and confirm citations appear
 
 ## 5. Baseline and Phase 1 exit
 
-- [ ] 5.1 Run ask path on a golden subset including `gq-001` and record qualitative baseline notes under `evals/` (e.g. `evals/phase1_baseline.md`)
+- [x] 5.1 Run ask path on a golden subset including `gq-001` and record qualitative baseline notes under `evals/` (e.g. `evals/phase1_baseline.md`)
 - [x] 5.2 Update docs with parse → chunk → index → ask command sequence
-- [ ] 5.3 Confirm Phase 1 exit: spike gate passed, v1 annual/financials indexed, citations + insufficiency paths demonstrated
+- [x] 5.3 Confirm Phase 1 exit: spike gate passed, v1 annual/financials indexed, citations + insufficiency paths demonstrated
 
 ## 6. Follow-on (post–Phase 1 exit): visual KPI path
 
 Sketched in `design.md` Decision 1b. Not required to close Phase 1.
+
+**Superseded:** split into its own change, `visual-kpi-vlm-extraction` (see
+`openspec/changes/visual-kpi-vlm-extraction/`), which absorbs tasks 6.1–6.4 below. Left unchecked
+here intentionally — tracked to completion in the new change instead.
 
 - [ ] 6.1 Spike design-heavy page detection on `2023_annual_en` Docling artifacts (figure density / image stubs / section heuristics)
 - [ ] 6.2 Spike figure-crop sources: Docling image export vs Marker JPEG crops vs page renders; pick a default for VLM input
