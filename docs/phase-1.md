@@ -58,14 +58,22 @@ python scripts/ask.py --golden gq-003
 
 1. **Parse** — `parse.py` runs Docling's `DocumentConverter` over the raw PDF, exports the
    document to Markdown, and walks Docling's item iterator to capture best-effort page-number
-   provenance per text item. Markdown tables are regex-extracted into a `tables.md` sidecar for
-   manual QA. Idempotent by default (skips if `document.md` + `meta.json` already exist); pass
-   `--force` to redo.
+   provenance per text item. The full per-item provenance list is persisted as a
+   `provenance.json` sidecar (not just a truncated sample in `meta.json`), so chunking can
+   resolve page-level citations without re-parsing the PDF. Markdown tables are regex-extracted
+   into a `tables.md` sidecar for manual QA. Idempotent by default (skips if `document.md` +
+   `meta.json` + `provenance.json` all already exist); pass `--force` to redo.
 
 2. **Chunk** — `chunk.py` splits each report's Markdown on H2/H3 headings to build **parent**
    chunks (full section text) and packs each section's paragraphs into **child** chunks (~500
    tokens, 300–800 range, using a ~4-chars/token heuristic since no real tokenizer is wired up).
-   Parent and child records are interleaved in one JSONL per report, linked by `parent_id`.
+   Parent and child records are interleaved in one JSONL per report, linked by `parent_id`. Page
+   provenance is resolved (not absent): parent `page_start`/`page_end` come from positionally
+   matching each section heading against `provenance.json`'s `section_header` rows; child
+   `page_start`/`page_end` come from positionally matching the child's paragraphs against the
+   section's passage-level provenance rows, falling back to the parent's range
+   (`page_source: "inherited"`) when that finer match doesn't resolve. A `page_source` field
+   (`"matched"` / `"inherited"` / `None`) marks how each range was derived.
 
 3. **Embed / index** — `rag.py` embeds only the child chunks via Ollama (`nomic-embed-text` by
    default) and upserts them into a local Chroma `PersistentClient` under `data/chroma/`, all in

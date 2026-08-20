@@ -47,6 +47,14 @@ that this report loses chart-borne figure content to Docling.
   have `page_start: None`), not an `ask.py` display bug. Section-level citation (`section=`) is
   populated and accurate, so citations are traceable to a document + section, just not a page.
   Matches the risk already called out in `design.md` ("Weak or missing page numbers from parser").
+  - **Resolved** by `openspec/changes/hybrid-parent-child-provenance` (2026-08-20): `parse_report()`
+    now persists full per-item provenance (`corpus/parsed/{report_id}/provenance.json`), and
+    `chunk_report()` resolves real `page_start`/`page_end` via positional provenance matching, with
+    a `page_source` field (`"matched"`/`"inherited"`) marking precision. Re-running `gq-005` now
+    shows `[chunk_id=2023_annual_en::child::00036; page_start=15; section=CARGO]` — a real page
+    instead of `unknown`. Across the 8-report v1 corpus: 99.7% of parents and 87.8% of children
+    resolve `"matched"`, 11.9% of children fall back to `"inherited"`, and only 0.3% of either stay
+    unresolved.
 - **Retrieval distance shows a usable separation band**: on-topic hits cluster ~0.27–0.63;
   off-topic (negative control) hits sit ≥1.01. Not wired into the pipeline as a hard cutoff, but a
   plausible future improvement to pre-filter obviously-irrelevant retrieval before it reaches the
