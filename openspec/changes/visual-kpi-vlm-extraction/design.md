@@ -126,6 +126,65 @@ Rollback: delete `corpus/kpi_facts/`; no changes to `corpus/parsed/`, `corpus/ch
 `data/chroma/` unless task 4 explicitly decides to write into them, in which case rollback extends
 to reverting that follow-up change.
 
+## Spike Results (2026-08-22)
+
+Ran the full pipeline against `2023_annual_en` (`scripts/spike_kpi_detect.py`,
+`scripts/spike_kpi_crops.py`, `scripts/spike_kpi_extract.py`). Full command sequence and outcome
+notes: `evals/kpi_vlm_spike.md`.
+
+- **Detection:** heading-keyword + figure-density heuristic flagged pages 4, 5, 6, 7 in
+  `2023_annual_en`, including the required Sources of Revenue (5) and Cargo Stats (6) pages, with
+  no false positives on financial-statement or narrative pages.
+- **Crop sourcing:** Docling image export (`generate_picture_images=True`) produced usable,
+  precise per-figure crops for both target pages — as good as or better than the earlier Marker
+  spike crops — so Marker was not needed for the two required figures. A "flat-graphic" filter
+  (mostly-white OR few-dominant-colors, above an area floor) reliably separated real chart crops
+  from decorative icons and photos, with one calibration fix needed for a colored-background map
+  chart (see below).
+- **VLM extraction:** `qwen2.5vl:7b` (pulled locally via Ollama — chosen for chart/infographic
+  reading strength over `llava`/`moondream`) correctly read the Sources of Revenue chart
+  (41% Cargo / 35% Real Estate / 12% Cruise / 9% / 3%, matching the Marker-spike ground truth
+  exactly) and the Cargo Stats pie (91%/9%, matching `4,209,781 / 4,613,423 MT` from text),
+  producing citable `label/value/unit/year/report_id/page/figure_id` facts.
+- **Two real failure modes found and fixed during the spike, not just anticipated:**
+  1. The crop-source fallback initially accepted a non-chart-like Marker photo (a container-ship
+     picture with no numbers on it) when Docling had nothing better; the VLM didn't refuse — it
+     quietly answered from unrelated page text instead, producing plausible-looking but ungrounded
+     facts with wrong labels. Fixed by only falling through to Marker when a candidate actually
+     passes the chart-like filter, otherwise going to a full-page render (which legitimately
+     contains the same numbers as visible pixels).
+  2. The initial extraction prompt let page context text override chart values outright (the model
+     read tonnage figures from body text instead of the pie chart's own 91%/9%). Fixed by
+     instructing the model that `value`/`unit` must come only from the image, while `text` may
+     still be used to word a `label` for slices with no on-image text of their own.
+- **Outcome: PASS** — both required scenarios (Sources of Revenue, one cargo-stats page) produced
+  correct, citable facts. `corpus/kpi_facts/2023_annual_en.jsonl` written; `corpus/parsed/`,
+  `corpus/chunks/`, and `data/chroma/` untouched.
+
+## Decision 6: Integration path — wait for Phase 3 Neo4j Metric nodes, don't join Phase 1 Chroma now
+
+- **Choice:** `kpi_facts.jsonl` stays a disconnected sidecar. Do not embed synthesized fact
+  sentences into the Phase 1 Chroma index; wait for Phase 3's Neo4j Metric-node schema to ingest
+  these facts directly.
+- **Why:** The fact shape (`label`, `value`, `unit`, `year`, `report_id`, `page`, `figure_id`) is
+  already typed/structured — a natural fit for graph Metric nodes, not for semantic-embedding
+  retrieval, which would require lossy text-ification first (e.g. "In 2023, Cargo was 41% of
+  Sources of Revenue (page 5)."). More importantly, this spike surfaced real fragility along the
+  way (crop-selection had to be corrected once a bad fallback was found; extraction prompt had to
+  be corrected once after it silently pulled values from the wrong source) on a four-page,
+  one-report sample — not yet enough validated accuracy to justify writing into the live,
+  already-passing Phase 1 index. A corpus-wide accuracy pass is a prerequisite for any live-index
+  integration, and is out of scope here (see Non-Goals).
+- **Alternatives considered:** Join Phase 1 Chroma now (rejected — couples unvalidated,
+  small-sample extraction to the working naive-RAG index ahead of broader validation); do both
+  now (rejected for the same reason, plus doubles integration work before Phase 3's Metric schema
+  even exists to check shape-fit against); do neither ever (rejected — the fact shape is
+  deliberately Metric-node-ready, so Phase 3 is a concrete, near-term consumer, not an open-ended
+  deferral).
+- **Follow-up scope:** None opened in this change (per task 4.3, only required if the decision was
+  "join Phase 1 index now"). Wiring `kpi_facts` into Neo4j Metric nodes belongs to the Phase 3
+  change, once its ontology exists to check the fit against.
+
 ## Open Questions
 
 - Which local Ollama vision model to use — resolved empirically during the spike, not upfront.

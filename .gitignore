@@ -8,6 +8,8 @@ corpus/parsed/**
 !corpus/parsed/.gitkeep
 corpus/chunks/**
 !corpus/chunks/.gitkeep
+corpus/kpi_facts/**
+!corpus/kpi_facts/.gitkeep
 data/chroma/
 .chroma/
 
