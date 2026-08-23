@@ -36,9 +36,9 @@ learning-first sequencing (`PLAN.md`).
   sidecar with page/figure provenance.
 
 ### Modified Capabilities
-(none — `document-parse`, `naive-rag`, and `parent-child-chunking` remain in the
-`phase-1-parse-rag` change and haven't been synced to `openspec/specs/` yet; this change adds a
-new capability alongside them rather than modifying their requirements.)
+(none — `document-parse`, `naive-rag`, and `parent-child-chunking` were synced to `openspec/specs/`
+when `phase-1-parse-rag` was archived; this change adds a new capability alongside them rather than
+modifying their requirements.)
 
 ## Impact
 
