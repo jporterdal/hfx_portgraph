@@ -30,13 +30,14 @@ def _chroma_client():
     )
 
 
-def _embed(texts: list[str]) -> list[list[float]]:
+def _embed(texts: list[str], prefix: str = "") -> list[list[float]]:
     vectors: list[list[float]] = []
     try:
         for text in texts:
+            embed_text = prefix + text
             # Prefer newer embed() API; fall back to embeddings().
             if hasattr(ollama, "embed"):
-                resp = ollama.embed(model=EMBED_MODEL, input=text)
+                resp = ollama.embed(model=EMBED_MODEL, input=embed_text)
                 if isinstance(resp, dict):
                     emb = resp.get("embeddings") or resp.get("embedding")
                     if isinstance(emb, list) and emb and isinstance(emb[0], list):
@@ -47,7 +48,7 @@ def _embed(texts: list[str]) -> list[list[float]]:
                     emb = getattr(resp, "embeddings", None) or getattr(resp, "embedding")
                     vectors.append(emb[0] if emb and isinstance(emb[0], list) else emb)
             else:
-                resp = ollama.embeddings(model=EMBED_MODEL, prompt=text)
+                resp = ollama.embeddings(model=EMBED_MODEL, prompt=embed_text)
                 if isinstance(resp, dict):
                     vectors.append(resp["embedding"])
                 else:
@@ -60,6 +61,20 @@ def _embed(texts: list[str]) -> list[list[float]]:
             "See docs/phase-1.md"
         ) from exc
     return vectors
+
+
+# Gate is a hardcoded startswith check, not a model->prefix-scheme registry,
+# because only one prefix convention is supported today. If a second
+# convention shows up, replace this with the small local registry sketched
+# in design.md Decision 4 instead of adding another branch here.
+def _embed_documents(texts: list[str]) -> list[list[float]]:
+    prefix = "search_document: " if EMBED_MODEL.startswith("nomic-embed") else ""
+    return _embed(texts, prefix=prefix)
+
+
+def _embed_query(text: str) -> list[float]:
+    prefix = "search_query: " if EMBED_MODEL.startswith("nomic-embed") else ""
+    return _embed([text], prefix=prefix)[0]
 
 
 def index_reports(report_ids: list[str], *, reset: bool = False) -> int:
@@ -106,7 +121,7 @@ def index_reports(report_ids: list[str], *, reset: bool = False) -> int:
             }
             for c in chunk
         ]
-        embeddings = _embed(docs)
+        embeddings = _embed_documents(docs)
         collection.upsert(ids=ids, documents=docs, metadatas=metadatas, embeddings=embeddings)
         total += len(chunk)
     return total
@@ -124,7 +139,7 @@ def retrieve(question: str, *, n_results: int = 6) -> list[dict]:
     collection = client.get_or_create_collection(name=COLLECTION_NAME)
     if collection.count() == 0:
         return []
-    q_emb = _embed([question])[0]
+    q_emb = _embed_query(question)
     result = collection.query(query_embeddings=[q_emb], n_results=min(n_results, collection.count()))
     hits: list[dict] = []
     ids = (result.get("ids") or [[]])[0]

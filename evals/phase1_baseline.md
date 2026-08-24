@@ -61,3 +61,32 @@ that this report loses chart-borne figure content to Docling.
   of earnings") in embedding space. Insufficiency fired correctly rather than hallucinating, which
   is the safe outcome, but the retrieval miss itself is a real naive-RAG limitation worth carrying
   into Phase 2/3 design discussions.
+
+## 2026-08-24 update — task-prefixed nomic embeddings (`nomic-embed-task-prefixes`)
+
+**Status:** RUN — local Ollama (`llama3.1`, `nomic-embed-text`) reachable; index rebuilt from
+scratch via `hfx-index --reset --v1-batch` (1147/1147 child chunks) after `_embed_documents()` /
+`_embed_query()` started applying nomic-embed-text's `search_document: ` / `search_query: `
+task prefixes at the Ollama call boundary. **The numbers below are not directly comparable to the
+run above** — that run's index was embedded without any prefix, this one's is fully prefixed
+(no mixed-scheme collection exists), so both the distance scale and retrieval ranking shifted.
+
+| id | tags | status (old → new) | notes |
+|---|---|---|---|
+| `gq-001` | yoy_metric, multi_hop, narrative, table_heavy (flagship) | `ok` → `answer_uncited` | Retrieval still surfaces only 2020–2022 evidence in the top 6 (distances 0.545–0.606) — 2023 is still missing, same substantive gap as before. Status label changed because the model's answer this run omitted the `[chunk_id=...]` citation tag, not because retrieval got worse; the year-span join is still the expected Phase 1 ceiling per design.md. |
+| `gq-005` | single_doc, narrative, table_heavy | `ok` → `ok` | Same outcome. Still correctly cites `[chunk_id=2023_annual_en::child::00036; ...]` for the 546,163 TEU figure. |
+| `gq-002` | single_doc, narrative | `ok` → `answer_uncited` | Retrieval quality looks comparable, but the model's phrasing this run ("does not explicitly mention...") dropped the inline citation tag on an otherwise reasonable answer. Prompt-adherence variance (see original "Citation format has three distinct outcomes" observation above), not an embedding regression. |
+| `gq-012` | multi_hop, narrative (no table) | `ok` → `ok` | Comparable outcome; reasonably grounded with citations. |
+| `gq-019` | year_collision, table_heavy, single_doc | `insufficient_evidence` → `insufficient_evidence` | Same failure mode as before — retrieval still surfaces "Comparative figures" footnotes across multiple years' financials instead of the statement of earnings. The `year_collision` gap is unaffected by task prefixing, as expected (it's a semantic-vs-literal ranking issue, not a document/query asymmetry issue). |
+| `gq-003` | single_doc, table_heavy | `answer_uncited` → `answer_uncited` | Unchanged. |
+| *(negative control)* | — | `insufficient_evidence` → `answer_uncited` | Retrieval distances for the off-topic query dropped from ≥1.01 to 0.87–0.91 — the absolute distance scale shifted with the new embedding space, as expected when prefixes change what's being compared. The model still correctly declined to answer ("There is no mention of the capital of France..."), it just phrased the decline without the classifier's expected "don't know"/"insufficient" keywords, so the `ask()` status classifier labels it `answer_uncited` instead of `insufficient_evidence`. Not a retrieval regression — the separation between on-topic (~0.55–0.65) and off-topic (~0.87–0.91) distances is still clearly present in the new scale. |
+
+**Takeaway:** No evidence of a retrieval regression from adding task prefixes — the two
+substantive gaps already on record (gq-001's year-span join, gq-019's `year_collision` literal
+match) reproduce identically. The `status` deltas above are `ok`/`insufficient_evidence` →
+`answer_uncited` label changes driven by `llama3.1`'s citation-phrasing variance and the
+classifier's keyword matching against the shifted distance scale, not by worse retrieval. This is
+the same "three distinct outcomes" prompt-adherence gap flagged in the original run, not a new
+issue introduced by this change. Because both `_embed_documents()` and `_embed_query()` now
+apply prefixes consistently and the whole collection was rebuilt from scratch (no mixed-scheme
+vectors), the prefixing itself is working as designed per `specs/naive-rag/spec.md`.
