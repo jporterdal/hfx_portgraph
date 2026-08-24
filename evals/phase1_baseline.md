@@ -61,3 +61,84 @@ that this report loses chart-borne figure content to Docling.
   of earnings") in embedding space. Insufficiency fired correctly rather than hallucinating, which
   is the safe outcome, but the retrieval miss itself is a real naive-RAG limitation worth carrying
   into Phase 2/3 design discussions.
+
+## 2026-08-24 update — task-prefixed nomic embeddings (`nomic-embed-task-prefixes`)
+
+**Status:** RUN — local Ollama (`llama3.1`, `nomic-embed-text`) reachable; index rebuilt from
+scratch via `hfx-index --reset --v1-batch` (1147/1147 child chunks) after `_embed_documents()` /
+`_embed_query()` started applying nomic-embed-text's `search_document: ` / `search_query: `
+task prefixes at the Ollama call boundary. **The numbers below are not directly comparable to the
+run above** — that run's index was embedded without any prefix, this one's is fully prefixed
+(no mixed-scheme collection exists), so both the distance scale and retrieval ranking shifted.
+
+| id | tags | status (old → new) | notes |
+|---|---|---|---|
+| `gq-001` | yoy_metric, multi_hop, narrative, table_heavy (flagship) | `ok` → `answer_uncited` | Retrieval still surfaces only 2020–2022 evidence in the top 6 (distances 0.545–0.606) — 2023 is still missing, same substantive gap as before. Status label changed because the model's answer this run omitted the `[chunk_id=...]` citation tag, not because retrieval got worse; the year-span join is still the expected Phase 1 ceiling per design.md. |
+| `gq-005` | single_doc, narrative, table_heavy | `ok` → `ok` | Same outcome. Still correctly cites `[chunk_id=2023_annual_en::child::00036; ...]` for the 546,163 TEU figure. |
+| `gq-002` | single_doc, narrative | `ok` → `answer_uncited` | Retrieval quality looks comparable, but the model's phrasing this run ("does not explicitly mention...") dropped the inline citation tag on an otherwise reasonable answer. Prompt-adherence variance (see original "Citation format has three distinct outcomes" observation above), not an embedding regression. |
+| `gq-012` | multi_hop, narrative (no table) | `ok` → `ok` | Comparable outcome; reasonably grounded with citations. |
+| `gq-019` | year_collision, table_heavy, single_doc | `insufficient_evidence` → `insufficient_evidence` | Same failure mode as before — retrieval still surfaces "Comparative figures" footnotes across multiple years' financials instead of the statement of earnings. The `year_collision` gap is unaffected by task prefixing, as expected (it's a semantic-vs-literal ranking issue, not a document/query asymmetry issue). |
+| `gq-003` | single_doc, table_heavy | `answer_uncited` → `answer_uncited` | Unchanged. |
+| *(negative control)* | — | `insufficient_evidence` → `answer_uncited` | Retrieval distances for the off-topic query dropped from ≥1.01 to 0.87–0.91 — the absolute distance scale shifted with the new embedding space, as expected when prefixes change what's being compared. The model still correctly declined to answer ("There is no mention of the capital of France..."), it just phrased the decline without the classifier's expected "don't know"/"insufficient" keywords, so the `ask()` status classifier labels it `answer_uncited` instead of `insufficient_evidence`. Not a retrieval regression — the separation between on-topic (~0.55–0.65) and off-topic (~0.87–0.91) distances is still clearly present in the new scale. |
+
+**Takeaway:** No evidence of a retrieval regression from adding task prefixes — the two
+substantive gaps already on record (gq-001's year-span join, gq-019's `year_collision` literal
+match) reproduce identically. The `status` deltas above are `ok`/`insufficient_evidence` →
+`answer_uncited` label changes driven by `llama3.1`'s citation-phrasing variance and the
+classifier's keyword matching against the shifted distance scale, not by worse retrieval. This is
+the same "three distinct outcomes" prompt-adherence gap flagged in the original run, not a new
+issue introduced by this change. Because both `_embed_documents()` and `_embed_query()` now
+apply prefixes consistently and the whole collection was rebuilt from scratch (no mixed-scheme
+vectors), the prefixing itself is working as designed per `specs/naive-rag/spec.md`.
+
+## 2026-08-24 addendum — rigorous prefix vs. no-prefix retrieval diff
+
+The comparison above judged the prefix change by eyeballing the raw distance-value ranges before
+and after (e.g. "0.545–0.606" looking broadly similar to the old "0.27–0.63" band), which is weak
+evidence — Chroma's collection here has no `hnsw:space` metadata set, so it defaults to squared
+L2 over nomic-embed-text's unit-normalized vectors (verified directly: `distance == 2 - 2·cos_sim`
+for a known pair). Absolute distance scale is a property of the metric/model, not a direct proxy
+for whether prefixing changed *which* chunks get retrieved.
+
+To get a real answer, two things were verified directly against the live index and a freshly
+built throwaway unprefixed index (same 1147 child chunks, same embedding calls, prefix stripped
+to replicate pre-change behavior):
+
+- **The live index is genuinely prefixed, not stale.** A vector pulled directly from the live
+  collection matches a fresh re-embed of that chunk's text with the `search_document: ` prefix
+  almost exactly (L2 ≈ 2×10⁻⁸) and is far from an unprefixed re-embed of the same text (L2 ≈
+  0.44). The reindex took effect.
+- **The prefix meaningfully changes the embedding vectors.** Plain vs. `search_document:`- vs.
+  `search_query:`-prefixed encodings of the same string differ by L2 ≈ 0.26–0.50 — larger than the
+  entire on-topic/off-topic distance band in retrieval results. This is not a no-op.
+
+With that settled, the two indexes' `retrieve()` top-6 were diffed chunk-by-chunk for the same
+golden subset plus the negative control:
+
+| id | top-6 chunk_id overlap (Jaccard) | notes |
+|---|---|---|
+| `gq-001` | 0.71 (5/6 same) | Same 2020–2022 evidence set in both, reordered only. 2023 still absent either way — confirms the "same substantive gap" claim above was accurate, not just asserted. |
+| `gq-002` | 0.71 (5/6 same) | Reordering only. |
+| `gq-003` | 0.71 (5/6 same) | Reordering only. |
+| `gq-005` | 0.71 (5/6 same) | Reordering only. |
+| `gq-012` | 0.50 (4/6 same) | **Real evidence swap, not just reordering.** Prefixing drops both 2021-specific chunks in favor of unrelated 2020/2022 content, for a question explicitly asking to compare 2021 vs. 2023 — a plausible quality regression on this item specifically. |
+| `gq-019` | 1.00 (identical set) | No change at all. |
+| *(negative control)* | 0.09 (1/6 same) | Expected — an irrelevant query has no real signal, so which noise floats to the top is arbitrary under either scheme. |
+
+Mean Jaccard across the 6 golden questions is ~0.68 (0.64 including the negative control) — i.e.
+roughly a third of retrieved evidence changed on average, more churn than "distances look similar"
+suggested. The on-topic/off-topic separation margin also *shrank* under prefixing rather than
+widening: unprefixed on-topic max (~0.73) vs. off-topic min (~1.02) is a gap of ~0.29; prefixed
+on-topic max (~0.70) vs. off-topic min (~0.87) is a gap of ~0.17. By that measure, discrimination
+between relevant and irrelevant evidence got tighter, not better.
+
+**Revised takeaway:** the prefix change is mechanically correct (verified independently of any
+distance-scale reasoning) and mostly neutral for this golden subset — five of six questions kept
+the same candidate evidence, just reordered. But "no evidence of regression" above overstates it:
+gq-012 lost real 2021-side evidence, and the on-topic/off-topic distance margin narrowed. This
+isn't a case for reverting the prefix change (it's the behavior nomic-embed-text was trained for,
+and the literal-vs-semantic `year_collision` failure mode it was hoped to help with is unrelated
+to it, as already noted), but it's not the unambiguous improvement the original framing implied
+either — worth a real eval-set comparison (precision/recall against golden citations, not just
+distance-scale or single-item spot checks) before leaning on task prefixing as a fix for anything
+beyond matching nomic-embed-text's documented usage.
