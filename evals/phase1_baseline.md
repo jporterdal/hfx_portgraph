@@ -90,3 +90,55 @@ the same "three distinct outcomes" prompt-adherence gap flagged in the original 
 issue introduced by this change. Because both `_embed_documents()` and `_embed_query()` now
 apply prefixes consistently and the whole collection was rebuilt from scratch (no mixed-scheme
 vectors), the prefixing itself is working as designed per `specs/naive-rag/spec.md`.
+
+## 2026-08-24 addendum — rigorous prefix vs. no-prefix retrieval diff
+
+The comparison above judged the prefix change by eyeballing the raw distance-value ranges before
+and after (e.g. "0.545–0.606" looking broadly similar to the old "0.27–0.63" band), which is weak
+evidence — Chroma's collection here has no `hnsw:space` metadata set, so it defaults to squared
+L2 over nomic-embed-text's unit-normalized vectors (verified directly: `distance == 2 - 2·cos_sim`
+for a known pair). Absolute distance scale is a property of the metric/model, not a direct proxy
+for whether prefixing changed *which* chunks get retrieved.
+
+To get a real answer, two things were verified directly against the live index and a freshly
+built throwaway unprefixed index (same 1147 child chunks, same embedding calls, prefix stripped
+to replicate pre-change behavior):
+
+- **The live index is genuinely prefixed, not stale.** A vector pulled directly from the live
+  collection matches a fresh re-embed of that chunk's text with the `search_document: ` prefix
+  almost exactly (L2 ≈ 2×10⁻⁸) and is far from an unprefixed re-embed of the same text (L2 ≈
+  0.44). The reindex took effect.
+- **The prefix meaningfully changes the embedding vectors.** Plain vs. `search_document:`- vs.
+  `search_query:`-prefixed encodings of the same string differ by L2 ≈ 0.26–0.50 — larger than the
+  entire on-topic/off-topic distance band in retrieval results. This is not a no-op.
+
+With that settled, the two indexes' `retrieve()` top-6 were diffed chunk-by-chunk for the same
+golden subset plus the negative control:
+
+| id | top-6 chunk_id overlap (Jaccard) | notes |
+|---|---|---|
+| `gq-001` | 0.71 (5/6 same) | Same 2020–2022 evidence set in both, reordered only. 2023 still absent either way — confirms the "same substantive gap" claim above was accurate, not just asserted. |
+| `gq-002` | 0.71 (5/6 same) | Reordering only. |
+| `gq-003` | 0.71 (5/6 same) | Reordering only. |
+| `gq-005` | 0.71 (5/6 same) | Reordering only. |
+| `gq-012` | 0.50 (4/6 same) | **Real evidence swap, not just reordering.** Prefixing drops both 2021-specific chunks in favor of unrelated 2020/2022 content, for a question explicitly asking to compare 2021 vs. 2023 — a plausible quality regression on this item specifically. |
+| `gq-019` | 1.00 (identical set) | No change at all. |
+| *(negative control)* | 0.09 (1/6 same) | Expected — an irrelevant query has no real signal, so which noise floats to the top is arbitrary under either scheme. |
+
+Mean Jaccard across the 6 golden questions is ~0.68 (0.64 including the negative control) — i.e.
+roughly a third of retrieved evidence changed on average, more churn than "distances look similar"
+suggested. The on-topic/off-topic separation margin also *shrank* under prefixing rather than
+widening: unprefixed on-topic max (~0.73) vs. off-topic min (~1.02) is a gap of ~0.29; prefixed
+on-topic max (~0.70) vs. off-topic min (~0.87) is a gap of ~0.17. By that measure, discrimination
+between relevant and irrelevant evidence got tighter, not better.
+
+**Revised takeaway:** the prefix change is mechanically correct (verified independently of any
+distance-scale reasoning) and mostly neutral for this golden subset — five of six questions kept
+the same candidate evidence, just reordered. But "no evidence of regression" above overstates it:
+gq-012 lost real 2021-side evidence, and the on-topic/off-topic distance margin narrowed. This
+isn't a case for reverting the prefix change (it's the behavior nomic-embed-text was trained for,
+and the literal-vs-semantic `year_collision` failure mode it was hoped to help with is unrelated
+to it, as already noted), but it's not the unambiguous improvement the original framing implied
+either — worth a real eval-set comparison (precision/recall against golden citations, not just
+distance-scale or single-item spot checks) before leaning on task prefixing as a fix for anything
+beyond matching nomic-embed-text's documented usage.
