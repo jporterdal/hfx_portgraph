@@ -142,3 +142,49 @@ to it, as already noted), but it's not the unambiguous improvement the original 
 either — worth a real eval-set comparison (precision/recall against golden citations, not just
 distance-scale or single-item spot checks) before leaning on task prefixing as a fix for anything
 beyond matching nomic-embed-text's documented usage.
+
+## 2026-08-27 addendum — corrected corpus (`strip-page-furniture`, task 6.4)
+
+**Status:** RUN — local Ollama (`llama3.1`, `nomic-embed-text`) reachable; index rebuilt from
+scratch via `hfx-index --reset --v1-batch` after `corpus/parsed/*` and `corpus/chunks/*` were
+regenerated with `openspec/changes/strip-page-furniture`'s fused furniture-detection signal
+(`parse.py`) and running-header/subtext fold (`chunk.py`). **The numbers below are not directly
+comparable to either run above** — the child-chunk population itself changed (1147 → 983, a
+14.3% reduction from stripping degenerate furniture-only chunks and merging previously-fragmented
+parents), not just the embedding scheme, so retrieval indices and chunk_ids differ structurally,
+not just by ranking. Same golden subset used in the two runs above (`gq-001/002/003/005/012/019`
+plus the negative control), still task-prefixed per the `nomic-embed-task-prefixes` change (both
+changes are cumulative on `main`, not alternatives).
+
+| id | tags | status (2026-08-24 → 2026-08-27) | notes |
+|---|---|---|---|
+| `gq-001` | yoy_metric, multi_hop, narrative, table_heavy (flagship) | `answer_uncited` → `answer_uncited` | Unchanged. Retrieval still tops out around 2020–2023 mixed evidence without a clean year-span join; still the expected Phase 1 ceiling per design.md, not a furniture-fix regression. |
+| `gq-002` | single_doc, narrative | `answer_uncited` → `ok` | Flipped back to `ok` — consistent with the citation-format prompt-adherence variance already on record (three prior instances of this same flip direction), not attributable to the corpus fix. |
+| `gq-003` | single_doc, table_heavy | `answer_uncited` → `answer_uncited` | Status unchanged, but retrieval composition changed: this run's top-6 include the *correct* `2023_financials_en` "Consolidated statement of earnings" chunk (previously buried behind uncited auditor's-responsibilities boilerplate), alongside a `2022_financials_en` statement-of-earnings chunk. The model's prose leaned on the 2022-vs-2021 comparative figures ($13,815/$13,151) rather than the 2023-vs-2022 figures ($13,841/$13,815) the question asks for, despite both being retrieved — an answer-composition issue (which retrieved statement the model chose to summarize), not a retrieval miss. Worth a closer look if `gq-003` keeps landing on the wrong year's statement in future runs. |
+| `gq-005` | single_doc, narrative, table_heavy | `ok` → `ok` | Unchanged. |
+| `gq-012` | multi_hop, narrative (no table) | `ok` → `ok` | Status unchanged; substance unchanged too — 2021-side evidence is still thin relative to 2022/2023 (only 1 of 6 top hits is `2021_annual_en`, vs. 3 `2023_annual_en` and 1 `2022_annual_en`). The furniture fix did **not** resolve the evidence-swap behavior flagged in the 2026-08-24 addendum — see Open Question answer below. |
+| `gq-019` | year_collision, table_heavy, single_doc | `insufficient_evidence` → `insufficient_evidence` | Status unchanged, and the failure mode is identical: all 6 top hits are still "17./16. Comparative figures" footnote sections, one per financials report (2020–2023), rather than the "Consolidated statement of earnings" section the question needs. Furniture contamination is not what was causing this miss — see Open Question answer below. |
+| *(negative control)* | — | `answer_uncited` → `insufficient_evidence` | Flipped back to the "clean" label — same prompt-adherence variance as `gq-002`, not a retrieval signal. Distance separation is, if anything, slightly wider than the 2026-08-24 run's prefixed band (on-topic max ~0.63 vs. off-topic min ~0.87, a gap of ~0.24 vs. that run's ~0.17). |
+
+**Answering design.md's Open Question** ("Does fixing the structural fragmentation measurably
+change `gq-019`'s `year_collision` outcome or `gq-012`'s evidence-swap behavior?"): **No, not on
+this golden subset.** Both failure modes reproduce identically post-fix:
+
+- `gq-019`'s retrieval still ranks the literal phrase "Comparative figures" (present verbatim as
+  a heading in every financials report's footnote 16/17, unrelated to the actual statement of
+  earnings) above the semantically-correct section. This was always a lexical-vs-semantic ranking
+  problem in the embedding/retrieval layer, not a furniture-contamination problem — the furniture
+  fix improves what's *inside* chunks and how sections are bounded, but doesn't touch which
+  section text ranks highest for a given query embedding. Confirms the Open Question's implicit
+  suspicion that these are separate problems requiring separate fixes (year_collision needs
+  something like `typed-retrieval-tools`'s section-type classifier, not a corpus-quality pass).
+- `gq-012`'s 2021-vs-2023 comparison still retrieves mostly 2022/2023 evidence with thin 2021
+  coverage. Same reasoning: furniture stripping reduces noise within chunks, it doesn't rebalance
+  which report-year a similarity search favors for a given query.
+
+**Corpus-quality impact, for context** (not itself an eval-quality claim): total child chunks
+983 vs. 1147 before (-14.3%), and boilerplate contamination of child chunks fell from 14.4% to
+1.5% corpus-wide (`tasks.md` 5.2). That improvement is real and measured, but — per the answer
+above — it addresses a different axis of corpus quality than the two ranking failures this golden
+subset's `year_collision`/multi-hop tags were designed to surface. Both remain open for whichever
+Phase 2 change (`typed-retrieval-tools`, `langgraph-plan-critique-loop`) picks them up next.

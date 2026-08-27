@@ -311,6 +311,39 @@ Options A/D and Docling's own FURNITURE flag (Option C's "bonus signal"), combin
   traceable back to the source PDF for citation-provenance auditing (Option A's fidelity concern,
   addressed by keeping a record rather than by not stripping).
 
+**Known accepted false positive — the Africville caption:** `2023_annual_en` page 27's photo
+caption (`"Pictured: the Africville Museum (photo credit: Tourism Nova Scotia/Dean Casavechia)"`)
+falls into exactly the "Docling+position, text singleton" bucket above and *is* stripped by the
+implemented signal (`signals_fired: ["docling", "position"]`). This isn't a bug — it's the named
+risk of that bucket materializing on the one item where it does. Investigated further post-implementation
+(full trace in `scripts/scratch/tension/README.md`): `_position_consistency` buckets items purely by
+geometric coordinate (`y-band`, `x-band`), with no requirement that the *candidate item's own text*
+be part of what recurs. The caption, though a singleton itself, sits at `top_frac 0.9325` — close
+enough to the running `"2023 Annual Report"` / page-number footer band (`top_frac 0.9317`, `pstdev
+0.0014`, well inside the 2% variance bar) across 19 other pages to inherit that band's corroboration
+by coincidence of layout, not because its own text repeats anywhere.
+
+The one geometric feature that *does* distinguish it from every other occupant of that bucket:
+bbox width. The caption spans `width 0.39` (page-relative, `left_frac 0.10` to `right_frac 0.49`);
+every other item sharing its position band — page numbers, `"2023 Annual Report"`, their merged
+2-up variants — spans `width ≤ 0.11`. A **possible future refinement**: add a width/bbox-shape
+consistency check to `_position_consistency` alongside the existing y/x-band + variance check
+(e.g. require candidate width to also fall within some tolerance of the bucket's median width),
+which could exclude captions like this one without weakening recall on genuine, narrow footer
+chrome. Not pursued as part of this change — unvalidated against the corpus's other position-signal
+recall case (`2021_annual_en`'s OCR-garbled footer instances on pages 20/38/39, in `2021_doc.pkl`),
+so it isn't known whether a width bar would exclude those too.
+
+Worth naming explicitly: the actual reason a *human* recognizes this as a caption rather than
+furniture is semantic, not geometric — its text references the content of the image it sits
+under ("Pictured...", "museum", "photo credit"). That distinction isn't a signal this parsing layer
+(bbox position, label, text-repetition) captures at all, and wouldn't be, short of a
+content-understanding pass this change's scope doesn't include (see the deferred learned-classifier
+alternative below). Accepted as part of this bucket's own documented ~0.4% corpus-wide false-positive
+rate (Context above) — a known, narrow precision cost of a signal that otherwise measurably improves
+contamination corpus-wide (see `scripts/scratch/tension/contamination_before.json` /
+`contamination_after.json`: 14.4% → 1.5%).
+
 **Architecture:** classification happens in `parse.py`, which now captures a per-item structured
 record (normalized bbox `top_frac`/`bottom_frac`/`left_frac`/`right_frac`, `label`, `content_layer`,
 text, `page_no`) for *every* item via `included_content_layers=set(ContentLayer)` (not just the
@@ -390,6 +423,96 @@ leave-one-report-out validation to check generalization rather than corpus-memor
 worthwhile work, but a separate follow-up, not a blocker for shipping the rule-based signal now.
 Revisit if the rule-based signal's real-world precision/recall (once measurable post-implementation)
 turns out to be unsatisfying.
+
+### Future work — semantic tie-breaker for the ambiguous bucket
+
+Distinct from the rejected learned classifier above (which would retrain/reweight the three existing
+signals): a semantic tie-breaker would fire only *inside* the already-isolated ambiguous slice
+("Docling FURNITURE flag + consistent position, but text is a singleton" — ~2/516 items, 0.4%
+corpus-wide), as a 4th signal read at classification time rather than a model trained beforehand. This
+sidesteps the rejected alternative's blocker: it needs no hand-labeled training set, only the existing
+known cases (Africville, TEU) as a sanity check, since it's inference-time classification, not training.
+
+Investigated post-implementation (full trace in `scripts/scratch/tension/README.md`): one appealing
+*free* option was ruled out first. Docling's own `PictureItem.captions` field structurally links a
+picture to its caption text — if populated, "is this item linked as a caption" would be a structural
+signal needing no semantic work at all. Checked against `2023_annual_en`'s reconverted document: page
+27 (where the Africville caption lives) has zero `PictureItem`s — the photo is a full-bleed
+section-divider background image Docling's layout model never segmented into a picture node, a
+separate failure from the furniture-mislabeling one. So any semantic signal here has to read the
+candidate's own text, not an existing structural link.
+
+Three tiers considered, cheapest to most powerful, each scoped to fire only on items already in the
+ambiguous bucket above (not corpus-wide, not a replacement for the fused rule):
+
+1. **Lexical heuristics** — regex/keyword cues (`"photo credit"`, `"Pictured:"`, a leading `"*"`
+   footnote marker). Would catch both known cases trivially, but carries the same overfitting risk
+   already flagged elsewhere in this design: keywords tuned to this corpus, unlikely to generalize to
+   a differently-worded caption in a future report.
+2. **Embedding similarity** — embed the candidate text and compare against a small reference set of
+   confirmed-furniture strings (or the document's body-text centroid); low similarity to furniture
+   implies likely real content. Reuses the nomic-embed pipeline already wired up in `rag.py` rather
+   than adding a new dependency. A cheaper, more general variant of the same idea needing no embeddings
+   at all: score the candidate's lexical/information-density as an outlier *relative to its own
+   position-bucket's other occupants* — furniture buckets are low-entropy/repetitive by construction,
+   and both known false positives have unusually high proper-noun/numeric specificity compared to
+   their bucket-mates.
+3. **LLM zero-shot read** — feed the candidate's text plus its immediate page neighbors (e.g. the
+   preceding section heading/paragraph) and ask whether it reads as furniture or substantive content.
+   Most robust (can reason about self-reference, e.g. "this text describes an image"), but is the
+   first point anywhere in `parse.py`/`chunk.py` that would introduce a network/model dependency into
+   what is today a pure, deterministic, offline parse step — re-running `parse_report()` on the same
+   PDF currently gives byte-identical `document.md`. That determinism guarantee would need to be
+   explicitly given up (or the LLM read cached/pinned per source PDF) for this bucket specifically.
+
+**Not pursued in this change**: the one known live instance (the Africville caption) carries
+near-zero informational content — a single decorative photo-credit line, not load-bearing for
+retrieval quality — so misclassifying it as furniture is very unlikely to degrade downstream
+question-answering. The trade-off already accepted above (see "Known accepted false positive") stands
+as-is. Revisit if either (a) the ambiguous bucket's false-positive rate grows as different report
+templates are added to the corpus (see Open Questions below on whether Decision 1's thresholds
+generalize past these 8 reports), or (b) a future false positive in this bucket carries real
+informational content, unlike this one.
+
+### Known intentional gap — cross-document templated boilerplate is not furniture, and is not stripped
+
+Discovered post-implementation while re-running `evals/phase1_baseline.md`'s golden subset
+(`tasks.md` 6.4): `gq-019`'s `year_collision` retrieval miss is dominated not by within-document page
+furniture but by a near-verbatim templated sentence that recurs **once per report**, across 6 of the
+8 v1 reports:
+
+```
+2021_annual_en::      "Certain of the comparative figures for 2020 have been reclassified to
+                        conform to the consolidated financial statement presentation adopted for 2021."
+2021_financials_en::  "Certain of the comparative figures for 2020 have been reclassified..."
+2022_financials_en::  "Certain of the comparative figures for 2021 have been reclassified..."
+2020_financials_en::  "Certain of the comparative figures for 2019 have been reclassified..."
+2022_annual_en::      "Certain of the comparative figures for 2021 have been reclassified..."
+2023_financials_en::  "Certain of the comparative figures for 2022 have been reclassified..."
+```
+
+Each occurrence is a real, singular sentence within its own report's "17. Comparative figures" (or
+"16." in `2023_financials_en`) note — not reprinted on every page of any one PDF the way a running
+header/footer is. Both of this change's mechanisms are scoped to detect repetition *within a single
+document*: `parse.py`'s text-repeat/position clustering runs over one report's `_collect_items()`
+output at a time, and `chunk.py`'s heading-family registry is rebuilt fresh per `chunk_report()` call.
+Neither can see, or was designed to see, that six different reports each contain a near-identical
+sentence — structurally this is invisible to a per-document furniture detector.
+
+**This is being recorded as an intentional gap, not a missed case to fix later.** Unlike page
+furniture (chrome that carries no information and exists purely as a print-layout artifact), a
+near-identical boilerplate sentence recurring across *different* documents is itself informative: two
+notes in different reports sharing near-identical phrasing are a structural signal that they are the
+*same kind of disclosure* (e.g., both are the standard "comparative figures reclassified" footnote
+that recurs every fiscal year because it's the same accounting template, not because anyone is padding
+the text). Stripping it the way within-document furniture is stripped would destroy that alignment
+signal for no retrieval benefit — the text isn't noise sitting on top of the report, it *is* the
+report's real content, just externally similar to its counterpart in sibling reports. A future
+cross-document classification or alignment mechanism (e.g. `typed-retrieval-tools`'s section-type
+work) could plausibly use this same-boilerplate-across-documents property as a *positive* feature
+("these two chunks are the same note type, from different years") rather than something to filter —
+the inverse of how it currently behaves as a `year_collision` liability. Not designed or implemented
+here; noted so it isn't rediscovered as a surprise or misdiagnosed as an incomplete furniture fix.
 
 ## Options Under Consideration
 
