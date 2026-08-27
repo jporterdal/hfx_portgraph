@@ -107,6 +107,41 @@ Extraction quality with Llama 3.1 8B will be the bottleneck. Prefer a larger loc
 | 3 | Ontology + Neo4j load; typed Cypher/tools | Graph modeling + safe tool use |
 | 4 | Hybrid tools + report compiler with source trail | End-to-end agentic research system |
 
+### Phase 3 note — semantic-interpretation gaps carried forward from `strip-page-furniture`
+
+`strip-page-furniture` (Phase 1 corpus-quality fix, landed 2026-08-27) hit three ambiguities its
+bbox-position/text-repetition/Docling-label signals could not resolve, because resolving them means
+reading what the text *means*, not where it sits or whether it repeats. Phase 3's "Constrained LLM
+entity+relation extract" step is the first point in this roadmap where the pipeline reads chunk
+content for meaning rather than only embedding it for similarity — flagged here so these don't get
+rediscovered as new problems once that capability exists:
+
+1. **Furniture-vs-real-content tie-breaking on meaning, not position.**
+   `openspec/changes/strip-page-furniture/design.md` Decision 1's "Known accepted false positive"
+   (the Africville Museum photo caption, stripped because it shares a furniture position band with
+   unrelated page numbers) and its "Future work — semantic tie-breaker" section: the only thing
+   separating that caption from real furniture is that its own text *describes an image*
+   ("Pictured: the Africville Museum...") — a self-reference no bbox/repetition/label signal sees.
+2. **Cross-document templated boilerplate as a potential positive signal, not noise.** Same
+   design.md's "Known intentional gap" section: near-identical boilerplate sentences (e.g. "Certain
+   of the comparative figures for {year} have been reclassified...") recur once per report across
+   several documents, and are deliberately left unstripped — two notes in different reports sharing
+   near-identical phrasing is itself a signal they're the same disclosure type, a feature a future
+   entity/relation extraction pass could exploit rather than something a furniture detector fights.
+3. **Heading-to-content semantic scoping across structural boundaries.** `2021_annual_en`'s "PORT OF
+   HALIFAX BY THE NUMBERS" page introduces several stat-card infographics, but Docling gives each
+   card (e.g. "4,902,894 Total Cargo in Metric Tonnes") its own sibling heading instead of nesting it
+   under the dashboard title — so the chunk holding "1,100 Commercial Cargo Vessels / 150 Countries /
+   19 Container Lines" carries none of the context tying it back to "by the numbers." Recognizing
+   that link requires understanding what "by the numbers" *means* in relation to a page of stat
+   callouts, not heading depth or page proximity — no signal in `parse.py`/`chunk.py` catches this.
+
+None of these were pursued in Phase 1 — see `strip-page-furniture/design.md`'s "Rejected alternative
+— learned classifier" for why (no hand-labeled ground truth exists yet to train or validate against).
+Revisit once Phase 3's extraction step exists: the same read that pulls entities/metrics out of a
+chunk could plausibly also judge these, since all three need the same capability — real content read
+for meaning, with page/document context, not just position or repetition.
+
 ## Design decisions to lock early
 
 1. Fixed ontology before free extraction
