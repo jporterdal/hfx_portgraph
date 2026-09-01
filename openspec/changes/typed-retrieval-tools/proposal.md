@@ -4,7 +4,7 @@
 
 ## What Changes
 
-- Add typed retrieval functions wrapping the existing Chroma collection with metadata `where` filters (currently unused): `retrieve_by_year(years, ...)`, `retrieve_by_report_id(report_ids, ...)`, and a combined filter form so callers can constrain year + report + section together.
+- Add typed retrieval functions wrapping the existing Chroma collection with metadata `where` filters (currently unused): `retrieve_by_year(years, ...)`, `retrieve_by_report(report_ids, ...)`, and a combined filter form so callers can constrain year + report + section together.
 - Add a metric/entity-oriented retrieval path that combines a keyword/semantic query against child text with the metadata filters above, so a caller can ask for "operating income across 2020–2023" as a set of typed calls rather than one query string.
 - Add section-type-aware retrieval (e.g. distinguishing primary statement sections from notes/footnote sections using heading/section metadata) to address the literal-phrase collision seen in `gq-019`.
 - Each typed function returns the same hit shape `retrieve()` already produces (chunk_id, text, metadata, parent_text) so downstream consumers (today's `ask()`, tomorrow's LangGraph tool wrappers) don't need a second data shape.

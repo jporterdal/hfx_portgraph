@@ -188,3 +188,12 @@ this golden subset.** Both failure modes reproduce identically post-fix:
 above — it addresses a different axis of corpus quality than the two ranking failures this golden
 subset's `year_collision`/multi-hop tags were designed to surface. Both remain open for whichever
 Phase 2 change (`typed-retrieval-tools`, `langgraph-plan-critique-loop`) picks them up next.
+
+## 2026-08-31 pointer — `typed-retrieval-tools` follow-up
+
+Both failure modes flagged above (`gq-001`'s missing-2023 year-span join, `gq-019`'s
+`year_collision` footnote ranking) are now addressed at the retrieval layer, decoupled from
+`ask()`: see `evals/typed_retrieval_validation.md` for the full direct-call coverage results
+(per-year fan-out closes the year-crowding gap; section-type re-ranking avoids the footnote
+collision on both `gq-019` and `gq-020`). This golden-subset baseline document remains the
+record of naive `retrieve()`/`ask()` behavior; it is intentionally left unmodified otherwise.

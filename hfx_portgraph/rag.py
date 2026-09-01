@@ -134,13 +134,21 @@ def index_v1(*, reset: bool = False) -> int:
     return index_reports(ids, reset=reset)
 
 
-def retrieve(question: str, *, n_results: int = 6) -> list[dict]:
-    client = _chroma_client()
-    collection = client.get_or_create_collection(name=COLLECTION_NAME)
-    if collection.count() == 0:
-        return []
-    q_emb = _embed_query(question)
-    result = collection.query(query_embeddings=[q_emb], n_results=min(n_results, collection.count()))
+def _parent_text_for(meta: dict) -> str | None:
+    parent_id = meta.get("parent_id")
+    report_id = meta.get("report_id")
+    if parent_id and report_id and chunks_path_for(report_id).exists():
+        for rec in load_chunks(report_id):
+            if rec.get("chunk_id") == parent_id:
+                return rec.get("text")
+    return None
+
+
+def _hits_from_chroma_result(result: dict) -> list[dict]:
+    """Build the standard hit shape (chunk_id, text, distance, metadata,
+    parent_text) from a raw `collection.query()` result. Shared by `retrieve()`
+    and the typed retrieval functions in `retrieval_tools.py` so parent-text
+    lookup logic lives in exactly one place."""
     hits: list[dict] = []
     ids = (result.get("ids") or [[]])[0]
     docs = (result.get("documents") or [[]])[0]
@@ -148,24 +156,26 @@ def retrieve(question: str, *, n_results: int = 6) -> list[dict]:
     dists = (result.get("distances") or [[]])[0]
     for i, cid in enumerate(ids):
         meta = metas[i] or {}
-        parent_text = None
-        parent_id = meta.get("parent_id")
-        report_id = meta.get("report_id")
-        if parent_id and report_id and chunks_path_for(report_id).exists():
-            for rec in load_chunks(report_id):
-                if rec.get("chunk_id") == parent_id:
-                    parent_text = rec.get("text")
-                    break
         hits.append(
             {
                 "chunk_id": cid,
                 "text": docs[i],
                 "distance": dists[i] if i < len(dists) else None,
                 "metadata": meta,
-                "parent_text": parent_text,
+                "parent_text": _parent_text_for(meta),
             }
         )
     return hits
+
+
+def retrieve(question: str, *, n_results: int = 6) -> list[dict]:
+    client = _chroma_client()
+    collection = client.get_or_create_collection(name=COLLECTION_NAME)
+    if collection.count() == 0:
+        return []
+    q_emb = _embed_query(question)
+    result = collection.query(query_embeddings=[q_emb], n_results=min(n_results, collection.count()))
+    return _hits_from_chroma_result(result)
 
 
 def _format_context(hits: list[dict]) -> str:

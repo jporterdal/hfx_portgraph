@@ -12,7 +12,7 @@
 
 ## 3. Retriever node
 
-- [ ] 3.1 Implement dispatch logic mapping plan evidence goals to `typed-retrieval-tools` calls (`retrieve_by_year`, `retrieve_by_report`, `retrieve_with_section_filter`), joining metric/entity text into the query string per call
+- [ ] 3.1 Implement dispatch logic mapping plan evidence goals to `typed-retrieval-tools` calls (`retrieve_by_year`, `retrieve_by_report`, `retrieve_with_section_filter`), joining metric/entity text into the query string per call. **[2026-08-31, resolved]** For entity/metric-only goals with no year (dispatched via bare `retrieve_by_report`, per design.md Decision 4), `typed-retrieval-tools/design.md`'s Decision 7 (fan-out `retrieve_by_report` by default) has landed — `retrieve_by_report` now guarantees per-report_id coverage on the bare call, so this dispatch path can be implemented directly against it (see `evals/typed_retrieval_validation.md`'s report-axis comparison table)
 - [ ] 3.2 Implement the per-iteration dispatch ceiling, prioritizing one call per planned year over exhaustive year×metric pairing when the plan would exceed it
 - [ ] 3.3 Accumulate retrieved hits into state, keyed by the evidence goal they satisfy, without duplicating identical chunk ids already accumulated in a prior iteration
 
