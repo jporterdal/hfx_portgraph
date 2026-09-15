@@ -80,3 +80,23 @@ python scripts/ask.py --golden gq-003
 ## Parse quality gate
 
 Before bulk indexing, confirm ≥3 golden items tagged `table_heavy` are answerable from spike parse Markdown/tables alone (no RAG). Record the outcome under `evals/phase1_parse_gate.md`.
+
+## Phase 2 follow-on
+
+Naive single-shot `retrieve()`/`ask()` above has a documented ceiling: it cannot do the year-span
+join `gq-001` needs (see `evals/phase1_baseline.md`), because nothing decides which years/metrics
+to query for, checks whether retrieval actually covered the question, or stops after a bounded
+number of tries. `openspec/changes/langgraph-plan-critique-loop` adds a LangGraph
+planner → retriever → critic → synthesizer loop on top of `typed-retrieval-tools`' year/report/
+section-scoped retrieval functions to close that gap, as a new, additive entrypoint:
+
+```bash
+python scripts/ask.py --golden gq-001          # Phase 1, naive single-shot
+hfx-agent-ask --golden gq-001                  # Phase 2, plan/retrieve/critique/answer loop
+```
+
+`hfx-agent-ask` (backed by `hfx_portgraph/agent.py`) returns the same `question`/`status`/`answer`/
+`citations`/`hits` shape `ask()` does, plus `plan` (the decomposed evidence goals) and `iterations`.
+It does not replace `hfx-ask` — both stay available; `rag.py`'s `retrieve()`/`ask()` are unchanged.
+See `evals/phase2_baseline.md` for the golden-set comparison against this document's Phase 1
+results.

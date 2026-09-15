@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 
+from hfx_portgraph.agent import DEFAULT_MAX_ITERATIONS, run_agent
 from hfx_portgraph.chunk import chunk_report
 from hfx_portgraph.parse import parse_report
 from hfx_portgraph.paths import v1_present_reports
@@ -88,6 +89,39 @@ def ask_main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(f"status: {result['status']}\n")
+        print(result["answer"])
+        print("\n--- citations ---")
+        for c in result["citations"]:
+            print(f"- {c}")
+    return 0 if result["status"] in {"ok", "insufficient_evidence", "answer_uncited"} else 1
+
+
+def agent_ask_main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Ask a question with the plan/retrieve/critique/answer agent loop")
+    parser.add_argument("question", nargs="?", help="Question text")
+    parser.add_argument("--golden", help="Golden item id (uses its question field)")
+    parser.add_argument("-k", type=int, default=6, help="Retriever top-k per dispatch call")
+    parser.add_argument(
+        "--max-iterations", type=int, default=DEFAULT_MAX_ITERATIONS, help="Max critic retry iterations"
+    )
+    parser.add_argument("--json", action="store_true", help="Print full JSON result")
+    args = parser.parse_args(argv)
+
+    if args.golden:
+        item = load_golden_item(args.golden)
+        question = item["question"]
+        print(f"# golden {args.golden}\n", file=sys.stderr)
+    elif args.question:
+        question = args.question
+    else:
+        parser.error("Provide a question or --golden ID")
+
+    result = run_agent(question, max_iterations=args.max_iterations, n_results=args.k)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(f"status: {result['status']} (iterations: {result['iterations']})\n")
+        print(f"plan: {json.dumps(result['plan'], ensure_ascii=False)}\n")
         print(result["answer"])
         print("\n--- citations ---")
         for c in result["citations"]:

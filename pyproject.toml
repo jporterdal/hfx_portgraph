@@ -12,6 +12,7 @@ dependencies = [
     "ollama>=0.4",
     "pypdfium2>=5.0",
     "pillow>=10.0",
+    "langgraph>=0.2,<0.3",
 ]
 
 [project.optional-dependencies]
@@ -24,6 +25,7 @@ hfx-parse = "hfx_portgraph.cli:parse_main"
 hfx-chunk = "hfx_portgraph.cli:chunk_main"
 hfx-index = "hfx_portgraph.cli:index_main"
 hfx-ask = "hfx_portgraph.cli:ask_main"
+hfx-agent-ask = "hfx_portgraph.cli:agent_ask_main"
 
 [build-system]
 requires = ["setuptools>=68"]

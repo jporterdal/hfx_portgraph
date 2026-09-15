@@ -99,13 +99,13 @@ Extraction quality with Llama 3.1 8B will be the bottleneck. Prefer a larger loc
 
 ## Phased build plan (learning-first)
 
-| Phase | Ship | Learning outcome |
-|---|---|---|
-| 0 | Scrape Halifax reports; inventory years/types; golden Q&A set (20–40) | Corpus hygiene + eval mindset |
-| 1 | OSS parse + parent-child + Ollama naive RAG | Chunking, embeddings, citations |
-| 2 | LangGraph: plan → retrieve → critique → answer (no Neo4j yet) | Deterministic agent loops |
-| 3 | Ontology + Neo4j load; typed Cypher/tools | Graph modeling + safe tool use |
-| 4 | Hybrid tools + report compiler with source trail | End-to-end agentic research system |
+| Phase | Ship | Learning outcome | Status |
+|---|---|---|---|
+| 0 | Scrape Halifax reports; inventory years/types; golden Q&A set (20–40) | Corpus hygiene + eval mindset | Shipped |
+| 1 | OSS parse + parent-child + Ollama naive RAG | Chunking, embeddings, citations | Shipped |
+| 2 | LangGraph: plan → retrieve → critique → answer (no Neo4j yet) | Deterministic agent loops | Shipped — see `docs/phase-1.md`'s Phase 2 follow-on and `evals/phase2_baseline.md` |
+| 3 | Ontology + Neo4j load; typed Cypher/tools | Graph modeling + safe tool use | Pending |
+| 4 | Hybrid tools + report compiler with source trail | End-to-end agentic research system | Pending |
 
 ### Phase 3 note — semantic-interpretation gaps carried forward from `strip-page-furniture`
 
