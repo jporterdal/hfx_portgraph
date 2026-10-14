@@ -22,6 +22,10 @@ The system SHALL dispatch retrieval for a plan using deterministic, code-driven 
 - **WHEN** a plan's year/metric combinations would exceed the configured per-iteration dispatch ceiling
 - **THEN** the system prioritizes at least one retrieval call per planned year over exhaustively covering every year/metric pair, and does not exceed the ceiling
 
+#### Scenario: More planned years than the dispatch ceiling
+- **WHEN** a plan's target years alone exceed the configured per-iteration dispatch ceiling
+- **THEN** the system issues no more retrieval calls than the ceiling in that pass, and any planned years not dispatched are treated as uncovered goals for the critique step
+
 ### Requirement: Bounded sufficiency critique
 The system SHALL check accumulated evidence against the plan's evidence goals after each retrieval pass, and SHALL either request additional retrieval for specifically missing goals or proceed to synthesis, up to a configured maximum number of iterations after which synthesis proceeds regardless of remaining gaps.
 
@@ -29,12 +33,16 @@ The system SHALL check accumulated evidence against the plan's evidence goals af
 - **WHEN** accumulated evidence has no hit for one of the plan's target years after a retrieval pass, and the iteration count is below the configured maximum
 - **THEN** the system issues an additional retrieval pass focused on the missing year(s) rather than re-running the full plan from scratch
 
+#### Scenario: Report-scoped goals are recognized as covered
+- **WHEN** a plan names target report ids but no target years, and a retrieval pass returns hits from those reports
+- **THEN** the system treats those report goals as covered, regardless of any year metadata on the returned chunks, and does not issue a retry or report them as uncovered gaps
+
 #### Scenario: Iteration cap forces synthesis with recorded gaps
 - **WHEN** the configured maximum number of iterations is reached and evidence gaps remain
 - **THEN** the system proceeds to synthesis and records which plan goals remain uncovered rather than looping further
 
 ### Requirement: Partial-coverage cited synthesis
-The system SHALL synthesize a final answer from all accumulated evidence across evidence goals, citing chunk and page/section identifiers for every factual claim, and SHALL explicitly state the absence of evidence for any plan goal that remains uncovered rather than omitting it silently or inventing a value for it.
+The system SHALL synthesize a final answer from the best-ranked accumulated evidence for each covered evidence goal (bounded so that every covered goal is represented and the assembled prompt fits the model's context window), citing chunk and page/section identifiers for every factual claim, and SHALL explicitly state the absence of evidence for any plan goal that remains uncovered rather than omitting it silently or inventing a value for it.
 
 #### Scenario: Answer covers available years and flags missing ones
 - **WHEN** synthesis runs with evidence covering some but not all of the plan's target years

@@ -219,20 +219,32 @@ def build_dispatch_units(
     `only_years`/`only_report_ids`, when given, restrict dispatch to just
     those slots (used by the critic's focused-retry pass for missing slots
     only, rather than re-running the full plan from scratch).
+
+    Each unit carries the plan-slot key (`year:Y` / `report:R`) it was
+    built from, so the retriever can file its hits under exactly the key
+    the critic checks (design.md Decision 5 amendment).
     """
-    years = sorted(only_years) if only_years is not None else plan["years"]
+    years = sorted(set(only_years if only_years is not None else plan["years"]))
     metrics = plan["metrics"]
     entities = plan["entities"]
 
     if years:
         if metrics and len(years) * len(metrics) <= ceiling:
             return [
-                {"kind": "year", "year": y, "report_ids": None, "query": _join_terms([m], entities)}
+                {"kind": "year", "slot": f"year:{y}", "year": y, "report_ids": None, "query": _join_terms([m], entities)}
                 for y in years
                 for m in metrics
             ]
+        # The ceiling is never exceeded, even when the plan has more years
+        # than it: only the first `ceiling` years (ascending) go out this
+        # pass, and the rest surface as critic gaps for the focused retry.
+        # Known limitation: years beyond `ceiling * max_iterations` are never
+        # dispatched (design.md Decision 4 amendment).
         joined_query = _join_terms(metrics, entities) or question
-        return [{"kind": "year", "year": y, "report_ids": None, "query": joined_query} for y in years]
+        return [
+            {"kind": "year", "slot": f"year:{y}", "year": y, "report_ids": None, "query": joined_query}
+            for y in years[:ceiling]
+        ]
 
     # Decision 4: metric/entity-only goals with no year dispatch via a bare
     # per-report_id call, scoped to the plan's report_ids (or all v1
@@ -241,7 +253,7 @@ def build_dispatch_units(
     rids = sorted(only_report_ids) if only_report_ids is not None else (plan["report_ids"] or [r["id"] for r in v1_present_reports()])
     rids = rids[:ceiling]
     query = _join_terms(metrics, entities) or question
-    return [{"kind": "report", "report_id": rid, "query": query} for rid in rids]
+    return [{"kind": "report", "slot": f"report:{rid}", "report_id": rid, "query": query} for rid in rids]
 
 
 def _dispatch_hits(unit: dict, *, n_results: int) -> list[dict]:
@@ -254,22 +266,21 @@ def _dispatch_hits(unit: dict, *, n_results: int) -> list[dict]:
     return retrieve_with_section_filter(unit["query"], report_ids=[unit["report_id"]], n_results=n_results)
 
 
-def _slot_key_for_hit(hit: dict) -> str:
-    year = hit.get("metadata", {}).get("year")
-    if year:
-        return f"year:{year}"
-    rid = hit.get("metadata", {}).get("report_id")
-    return f"report:{rid}" if rid else "unscoped"
-
-
-def _accumulate(evidence: dict[str, list[dict]], hits: list[dict]) -> dict[str, list[dict]]:
+def _accumulate(
+    evidence: dict[str, list[dict]], slot_hits: list[tuple[str, list[dict]]]
+) -> dict[str, list[dict]]:
+    """Merge each dispatch unit's hits into evidence under that unit's
+    plan-slot key -- not a key inferred from hit metadata, which would file
+    every v1 chunk under `year:` and never match a report-only plan's
+    `report:` slots (design.md Decision 5 amendment)."""
     seen = {h["chunk_id"] for hits_list in evidence.values() for h in hits_list}
     merged = {k: list(v) for k, v in evidence.items()}
-    for hit in hits:
-        if hit["chunk_id"] in seen:
-            continue
-        seen.add(hit["chunk_id"])
-        merged.setdefault(_slot_key_for_hit(hit), []).append(hit)
+    for slot, hits in slot_hits:
+        for hit in hits:
+            if hit["chunk_id"] in seen:
+                continue
+            seen.add(hit["chunk_id"])
+            merged.setdefault(slot, []).append(hit)
     return merged
 
 
@@ -295,11 +306,9 @@ def retriever_node(state: AgentState) -> dict:
         only_years=focus_years,
         only_report_ids=focus_report_ids,
     )
-    hits: list[dict] = []
-    for unit in units:
-        hits.extend(_dispatch_hits(unit, n_results=n_results))
+    slot_hits = [(unit["slot"], _dispatch_hits(unit, n_results=n_results)) for unit in units]
 
-    evidence = _accumulate(state.get("evidence") or {}, hits)
+    evidence = _accumulate(state.get("evidence") or {}, slot_hits)
     return {"evidence": evidence}
 
 

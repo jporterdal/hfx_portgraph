@@ -12,7 +12,7 @@
 
 ## 3. Retriever node
 
-- [x] 3.1 Implement dispatch logic mapping plan evidence goals to `typed-retrieval-tools` calls (`retrieve_by_year`, `retrieve_by_report`, `retrieve_with_section_filter`), joining metric/entity text into the query string per call. **[2026-08-31, resolved]** For entity/metric-only goals with no year (dispatched via bare `retrieve_by_report`, per design.md Decision 4), `typed-retrieval-tools/design.md`'s Decision 7 (fan-out `retrieve_by_report` by default) has landed — `retrieve_by_report` now guarantees per-report_id coverage on the bare call, so this dispatch path can be implemented directly against it (see `evals/typed_retrieval_validation.md`'s report-axis comparison table)
+- [x] 3.1 Implement dispatch logic mapping plan evidence goals to `typed-retrieval-tools` calls (`retrieve_by_year`, `retrieve_by_report`, `retrieve_with_section_filter`), joining metric/entity text into the query string per call. **[2026-08-31, resolved]** For entity/metric-only goals with no year (dispatched via bare `retrieve_by_report`, per design.md Decision 4), `typed-retrieval-tools/design.md`'s Decision 7 (fan-out `retrieve_by_report` by default) has landed — `retrieve_by_report` now guarantees per-report_id coverage on the bare call, so this dispatch path can be implemented directly against it (see `evals/typed_retrieval_validation.md`'s report-axis comparison table). **[2026-10-14, as implemented]** All units dispatch through `retrieve_with_section_filter()`, one year or one report_id per unit, rather than calling `retrieve_by_year`/`retrieve_by_report` directly — see design.md Decision 4 amendments
 - [x] 3.2 Implement the per-iteration dispatch ceiling, prioritizing one call per planned year over exhaustive year×metric pairing when the plan would exceed it
 - [x] 3.3 Accumulate retrieved hits into state, keyed by the evidence goal they satisfy, without duplicating identical chunk ids already accumulated in a prior iteration
 
@@ -24,7 +24,7 @@
 
 ## 5. Synthesizer node
 
-- [x] 5.1 Assemble the final-answer prompt from all accumulated evidence across evidence goals, reusing/adapting `rag.py::_format_context()` for context formatting
+- [x] 5.1 Assemble the final-answer prompt from all accumulated evidence across evidence goals, reusing/adapting `rag.py::_format_context()` for context formatting. **[2026-10-14, as implemented]** Evidence is capped per slot and overall, with `num_ctx` sized to the prompt — see design.md Decision 9
 - [x] 5.2 Instruct the model to explicitly state "no evidence found" for any plan goal recorded as an uncovered gap, rather than omitting it or inventing a value
 - [x] 5.3 Implement citation-tag detection (reusing `ask()`'s `"chunk_id=" in answer.lower()` check) and the one-shot repair re-prompt when citations are missing but evidence was supplied
 - [x] 5.4 Assemble the final result dict matching `ask()`'s shape (`question`, `status`, `answer`, `citations`, `hits`) plus new `plan` and `iterations` fields
@@ -46,3 +46,16 @@
 
 - [x] 8.1 Confirm no changes were made to `corpus/parsed/`, `corpus/chunks/`, `data/chroma/`, `rag.py`, or the existing `hfx-ask` CLI (this change is additive only)
 - [x] 8.2 Add a Phase 2 follow-on note to `docs/phase-1.md` and update `PLAN.md`'s phase table to reflect Phase 2 as shipped
+
+## 9. Plan-keyed evidence (design.md Decision 5 amendment, 2026-10-14)
+
+- [x] 9.1 Carry each dispatch unit's plan-slot key (`year:Y` / `report:R`) through dispatch in `retriever_node`, and accumulate hits into evidence under that key rather than flattening hits and re-deriving the key from metadata
+- [x] 9.2 Remove `_slot_key_for_hit` (or narrow it to a documented fallback, if any caller still needs one) so the evidence key space matches `_plan_slots` by construction
+- [x] 9.3 Verify with a report-only plan (`report_ids` set, `years` empty): report slots register as covered after one pass, no retry is issued, and no false gap notice reaches the synthesizer
+- [ ] 9.4 Re-run at least one year-plan golden item (e.g. `gq-001`) and confirm unchanged evidence keys, iterations, and status versus `evals/phase2_baseline.md`
+
+## 10. Hard dispatch ceiling (design.md Decision 4 amendment, 2026-10-14)
+
+- [x] 10.1 In `build_dispatch_units`, cap the collapsed one-unit-per-year path at `ceiling` units (first `ceiling` years, ascending), matching the existing cap on the report path, so no pass ever exceeds the ceiling
+- [x] 10.2 Add a short comment at the cap noting the known limitation (years beyond `ceiling × max_iterations` are unreachable) and pointing to design.md Decision 4
+- [x] 10.3 Verify with a synthetic plan whose year count exceeds a small ceiling (e.g. 6 years, `dispatch_ceiling=4`): first pass issues 4 calls, the 2 undispatched years appear as critic gaps, and the retry pass dispatches them
